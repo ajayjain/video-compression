@@ -1,0 +1,8 @@
+# Vim
+*.un~
+
+# Python
+*.pyc
+
+# Data and videos
+data/
