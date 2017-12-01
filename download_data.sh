@@ -9,15 +9,15 @@ echo ""
 
 mkdir -p data/live
 
-# live_videos=(bs1_25fps.yuv mc1_50fps.yuv pa1_25fps.yuv rb1_25fps.yuv rh1_25fps.yuv sf1_25fps.yuv st1_25fps.yuv tr1_25fps.yuv)
-# for video in "${live_videos[@]}"; do
-#     prefix="${video:0:2}"
-#     url="$LIVE_BASE_URL$prefix Folder/$video"
-#
-#     echo "[INFO] Downloading $url"
-#     wget "$url" --user="$live_user" --password="$live_password" -P data/live/
-#     echo ""
-# done
+live_videos=(bs1_25fps.yuv mc1_50fps.yuv pa1_25fps.yuv rb1_25fps.yuv rh1_25fps.yuv sf1_25fps.yuv st1_25fps.yuv tr1_25fps.yuv)
+for video in "${live_videos[@]}"; do
+    prefix="${video:0:2}"
+    url="$LIVE_BASE_URL$prefix Folder/$video"
+
+    echo "[INFO] Downloading $url"
+    wget "$url" --user="$live_user" --password="$live_password" -P data/live/
+    echo ""
+done
 
 live_videos=(pr1_50fps.yuv sh1_50fps.yuv)
 for video in "${live_videos[@]}"; do
