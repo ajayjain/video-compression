@@ -1,7 +1,7 @@
 from PIL import Image
 import numpy as np
 
-def load_YUV420_video(path, dim=[768, 432]):
+def load_YUV420_video(path, dim):
     """Load a YUV420 video to a byte matrix and PIL images"""
 
     # Parameters for YUV 4:2:0 chroma subsampling format
