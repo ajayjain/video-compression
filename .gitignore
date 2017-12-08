@@ -1,5 +1,6 @@
 # Vim
 *.un~
+*.swp
 
 # Python
 *.pyc
