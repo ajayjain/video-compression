@@ -20,7 +20,7 @@ class GDN2d(nn.Module):
         self.beta.data.uniform_()
 
     def forward(self, input):
-        if training:
+        if self.training:
             # Error check borrowed from PyTorch's nn.functional.batch_norm implementation
             size = list(input.size())
             if reduce(operator.mul, size[2:], size[0]) == 1:
@@ -48,7 +48,7 @@ class IGDN2d(GDN2d):
         super(IGDN2d, self).__init__()
 
     def forward(self, input):
-        if training:
+        if self.training:
             size = list(input.size())
             if reduce(operator.mul, size[2:], size[0]) == 1:
                 raise ValueError(
@@ -68,42 +68,56 @@ class IGDN2d(GDN2d):
 
 class Compress(nn.Module):
     def __init__(self, in_channels=1, out_channels=128):
-        self.channels = channels
-
         # NOTE(ajayjain): I'm guessing the padding, but it looks like the 
         # authors simply pad the image once at the beginning.
         # Downsampling is implemented via strided convolutions
 
         # Let the number of intermediate channels equal the output channels
-        channels = out_channels
+        self.layers = nn.Sequential(
+            # Stage 1
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=9,
+                stride=4,
+                padding=4
+            ),
+            GDN2d(out_channels),
 
-        self.layers = [
-            nn.Conv2d(in_channels=in_channels, out_channels=channels, kernel_size=9, stride=4, padding=4),
+            # Stage 2
+            nn.Conv2d(
+                in_channels=out_channels,
+                out_channels=out_channels,
+                kernel_size=5,
+                stride=2,
+                padding=2
+            ),
             GDN2d(channels),
-            nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=5, stride=2, padding=2),
+
+            # Stage 3
+            nn.Conv2d(
+                in_channels=out_channels,
+                out_channels=out_channels,
+                kernel_size=5,
+                stride=2,
+                padding=2
+            ),
             GDN2d(channels),
-            nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=5, stride=2, padding=2),
-            GDN2d(channels),
-        ]
+        )
 
     def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
-
-        return x
+        return self.layers(x)
 
 
-class Decompress(nn.Module):
-    def __init__(self, channels=128):
-        self.channels = channels
-
-        self.layers = [
+class Uncompress(nn.Module):
+    def __init__(self, in_channels=128, out_channels=1):
+        self.layers = nn.Sequential(
             # Stage 1
             IGDN2d(channels),             # invert the normalization transform
             nn.Upsample(scale_factor=2),  # nearest-neighbor upsampling
             nn.Conv2d(                    # convolutional filter
-                in_channels=channels,
-                out_channels=channels,
+                in_channels=in_channels,
+                out_channels=in_channels,
                 kernel_size=5,
                 stride=1,
                 padding=2
@@ -113,8 +127,8 @@ class Decompress(nn.Module):
             IGDN2d(channels),           
             nn.Upsample(scale_factor=2),
             nn.Conv2d(
-                in_channels=channels,
-                out_channels=channels,
+                in_channels=in_channels,
+                out_channels=in_channels,
                 kernel_size=5,
                 stride=1,
                 padding=2
@@ -124,18 +138,55 @@ class Decompress(nn.Module):
             IGDN2d(channels),
             nn.Upsample(scale_factor=4),
             nn.Conv2d(
-                in_channels=channels,
-                out_channels=1,
+                in_channels=in_channels,
+                out_channels=out_channels,
                 kernel_size=9,
                 stride=1,
                 padding=4
             ),
-        ]
+        )
     
 
     def forward(self, x):
-        for layer in layers:
-            x = layer(x)
+        return self.layers(x)
 
-        return x
+
+def CompressUncompress(nn.Module):
+    def __init__(self, image_channels=1, inner_channels=128):
+        self.compress =
+            Compress(
+                in_channels=image_channels,
+                out_channels=inner_channels
+            )
+
+        self.uncompress =
+            Uncompress(
+                in_channels=inner_channels,
+                out_channels=image_channels
+            )
+
+        # TODO(ajayjain): parameters for spline approximating p_{y_i} (y_i)
+
+    def forward(self, input):
+        # Transform input to latent code space, y = g_a(x; phi)
+        y = self.compress(input)
+
+        # (Relaxed) quantization step for transmission
+        if self.training:
+            # Relaxed quantization:
+            #   Add noise, sampled uniformly on [-0.5, 0.5)
+            q = y + (torch.rand(y.shape) - 0.5)
+        else:
+            # Quantization by rounding
+            # TODO(ajayjain): Verify this works, as torch.round may not
+            # be available for variables
+            q = torch.round(y)
+
+        # Reinterpret q as an approximation of the pre-transmission code:
+        #   y_hat = q,
+        # and transform back to the data space:
+        #   x_hat = g_s(y_hat; theta) = g_s(q; theta)
+        reconstructed = self.uncompress(q)
+
+        return reconstructed
 
