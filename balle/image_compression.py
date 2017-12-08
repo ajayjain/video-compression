@@ -1,8 +1,10 @@
+import math
 import operator
 
+import torch
 import torch.nn as nn
-import math
-import torch.utils.model_zoo as model_zoo
+import torch.nn.parallel
+import torch.backends.cudnn as cudnn
 
 
 class GDN2d(nn.Module):
@@ -11,7 +13,7 @@ class GDN2d(nn.Module):
         self.num_features = num_features
 
         self.gamma_conv = nn.Conv2d(in_channels=num_features, out_channels=num_features, kernel_size=1, stride=1, padding=0)
-        self.beta = Parameter(torch.Tensor((num_features, 1, 1)))
+        self.beta = nn.Parameter(torch.Tensor((num_features, 1, 1)))
 
         self.reset_parameters()
 
@@ -45,7 +47,7 @@ class GDN2d(nn.Module):
 
 class IGDN2d(GDN2d):
     def __init__(self, num_features):
-        super(IGDN2d, self).__init__()
+        super(IGDN2d, self).__init__(num_features)
 
     def forward(self, input):
         if self.training:
@@ -68,6 +70,7 @@ class IGDN2d(GDN2d):
 
 class Compress(nn.Module):
     def __init__(self, in_channels=1, out_channels=128):
+        super(Compress, self).__init__()
         # NOTE(ajayjain): I'm guessing the padding, but it looks like the 
         # authors simply pad the image once at the beginning.
         # Downsampling is implemented via strided convolutions
@@ -92,7 +95,7 @@ class Compress(nn.Module):
                 stride=2,
                 padding=2
             ),
-            GDN2d(channels),
+            GDN2d(out_channels),
 
             # Stage 3
             nn.Conv2d(
@@ -102,7 +105,7 @@ class Compress(nn.Module):
                 stride=2,
                 padding=2
             ),
-            GDN2d(channels),
+            GDN2d(out_channels),
         )
 
     def forward(self, x):
@@ -111,9 +114,10 @@ class Compress(nn.Module):
 
 class Uncompress(nn.Module):
     def __init__(self, in_channels=128, out_channels=1):
+        super(Uncompress, self).__init__()
         self.layers = nn.Sequential(
             # Stage 1
-            IGDN2d(channels),             # invert the normalization transform
+            IGDN2d(in_channels),          # invert the normalization transform
             nn.Upsample(scale_factor=2),  # nearest-neighbor upsampling
             nn.Conv2d(                    # convolutional filter
                 in_channels=in_channels,
@@ -124,7 +128,7 @@ class Uncompress(nn.Module):
             ),
 
             # Stage 2
-            IGDN2d(channels),           
+            IGDN2d(in_channels),           
             nn.Upsample(scale_factor=2),
             nn.Conv2d(
                 in_channels=in_channels,
@@ -135,7 +139,7 @@ class Uncompress(nn.Module):
             ),
 
             # Stage 3
-            IGDN2d(channels),
+            IGDN2d(in_channels),
             nn.Upsample(scale_factor=4),
             nn.Conv2d(
                 in_channels=in_channels,
@@ -151,19 +155,19 @@ class Uncompress(nn.Module):
         return self.layers(x)
 
 
-def CompressUncompress(nn.Module):
+class CompressUncompress(nn.Module):
     def __init__(self, image_channels=1, inner_channels=128):
-        self.compress =
-            Compress(
-                in_channels=image_channels,
-                out_channels=inner_channels
-            )
+        super(CompressUncompress, self).__init__()
 
-        self.uncompress =
-            Uncompress(
-                in_channels=inner_channels,
-                out_channels=image_channels
-            )
+        self.compress = Compress(
+            in_channels=image_channels,
+            out_channels=inner_channels
+        )
+
+        self.uncompress = Uncompress(
+            in_channels=inner_channels,
+            out_channels=image_channels
+        )
 
         # TODO(ajayjain): parameters for spline approximating p_{y_i} (y_i)
 
@@ -189,4 +193,19 @@ def CompressUncompress(nn.Module):
         reconstructed = self.uncompress(q)
 
         return reconstructed
+
+
+class RateDistortionLoss(nn.Module):
+    def __init__(self, gamma):
+        self.gamma = gamma
+        super(RateDistortionLoss, self).__init__()
+
+        self.distortion_loss = nn.MSELoss()
+
+    def forward(self, original, reconstructed):
+        D = self.distortion_loss(original, reconstructed)
+        # TODO(ajayjain): Implement rate estimate
+        R = 0
+
+        return R + self.gamma * D
 
