@@ -12,14 +12,18 @@ import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 
+from image_identity import ImageIdentity
 from image_compression import CompressUncompress
+from grayscale_transform import Grayscale
 
 
 parser = argparse.ArgumentParser(description='Training an End-to-End image compression model')
 # Data arguments
-parser.add_argument('--data', metavar='PATH', required=True,
-                            help='path to dataset')
-parser.add_argument('--color-mode', help='input/output color mode [gray | color] (default: gray)')
+parser.add_argument('--train-dir', metavar='PATH', required=True,
+                            help='path to train data folder')
+parser.add_argument('--val-dir', metavar='PATH', required=True,
+                            help='path to validation data folder')
+parser.add_argument('--color-mode', default='gray', help='input/output color mode [gray | color] (default: gray)')
 parser.add_argument('--threads', '-j', default=2, type=int, metavar='N',
                             help='number of data loading threads (default: 2)')
 # Training arguments
@@ -42,19 +46,22 @@ args = parser.parse_args()
 # Data loading
 # TODO(ajayjain): Balle et al. removed images with "excessive saturation", and
 #                 added uniform noise to pixel values
-transform = transforms.Compose([
+if args.color_mode == 'gray':
+    transform_list = [Grayscale()]
+else:
+    transform_list = []
+transform_list.extend([
     transforms.RandomSizedCrop(256),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
 ])
+transform = transforms.Compose(transform_list)
 
-traindir = os.path.join(args.data, 'train')
-valdir = os.path.join(args.data, 'val')
-train = datasets.ImageFolder(traindir, transform)
-val = datasets.ImageFolder(valdir, transform)
+train = ImageIdentity(args.train_dir, transform)
+val = ImageIdentity(args.val_dir, transform)
 train_loader = torch.utils.data.DataLoader(
     train,
-    batch_size=args.batch-size,
+    batch_size=args.batch_size,
     shuffle=True,
     num_workers=args.threads
 )
@@ -79,12 +86,13 @@ model = DataParallel(base_model)
 
 
 # Define loss function and optimizer
-criterion = None
+# TODO(ajayjain): switch to image_compression.RateDistortionLoss
+loss = nn.MSELoss().cuda()
 optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
 
 # Pass model, loss, optimizer, and data loader to the trainer
-t = trainer.Trainer(model, criterion, optimizer, train_loader)
+t = trainer.Trainer(model, loss, optimizer, train_loader)
 
 
 # Register some monitoring plugins
