@@ -1,3 +1,4 @@
+from functools import reduce
 import math
 import operator
 
@@ -8,14 +9,16 @@ import torch.backends.cudnn as cudnn
 
 
 class GDN2d(nn.Module):
-    def __init__(self, num_features):
+    def __init__(self, num_features, eps=1e-9):
         super(GDN2d, self).__init__()
         self.num_features = num_features
 
         self.gamma_conv = nn.Conv2d(in_channels=num_features, out_channels=num_features, kernel_size=1, stride=1, padding=0)
-        self.beta = nn.Parameter(torch.Tensor((num_features, 1, 1)))
+        self.beta = nn.Parameter(torch.rand((num_features, 1, 1)) + eps)
 
         self.reset_parameters()
+
+        self.eps = eps
 
     def reset_parameters(self):
         # TODO(ajayjain): Is this the best initialization of the parameters? perhaps zero_() for beta?
@@ -31,14 +34,22 @@ class GDN2d(nn.Module):
                     .format(size)
                 )
 
+        # NOTE(ajayjain): Temporarily using a tanh activation until I can debug
+        # explosion of activations with GDN/IGDN
+        #nn.functional.softmin(input, dim=
+        return nn.functional.tanh(input)
+
         # Calculate element-wise normalization factors
         u = input.pow(2)
         u = self.gamma_conv(u)
         u = u + self.beta.expand_as(u)
-        u = u.rqrt()
+        # Apply relu to u, so sqrt arg is nonnegative
+        # and add eps for nonzero denominator
+        u = nn.functional.relu(u) + self.eps
+        u = u.rsqrt()
 
         # Normalize input
-        return input * u
+        return torch.clamp(input * u, max=1e3)
 
     def __repr__(self):
         return ('{name}({num_features}'
@@ -58,10 +69,16 @@ class IGDN2d(GDN2d):
                     .format(size)
                 )
 
+        return nn.functional.tanh(input)
+
         # Calculate element-wise inverse normalization factors
-        w = input.pow(2)
+        w = torch.pow(input, 2)
+        w = torch.clamp(w, min=0, max=1e6)
+        print(w)
         w = self.gamma_conv(w)
         w = w + self.beta.expand_as(w)
+        # Apply relu to w, so sqrt arg is nonnegative
+        w = nn.functional.relu(w)
         w = w.sqrt()
 
         # Apply elementwise factors
@@ -164,6 +181,8 @@ class CompressUncompress(nn.Module):
             out_channels=inner_channels
         )
 
+        self.noise = torch.autograd.Variable(torch.rand(1), requires_grad = False).cuda()
+
         self.uncompress = Uncompress(
             in_channels=inner_channels,
             out_channels=image_channels
@@ -179,7 +198,11 @@ class CompressUncompress(nn.Module):
         if self.training:
             # Relaxed quantization:
             #   Add noise, sampled uniformly on [-0.5, 0.5)
-            q = y + (torch.rand(y.shape) - 0.5)
+            #self.noise = self.noise.expand_as(y)
+            #self.noise.data.uniform_()
+            #self.noise = self.noise - 0.5
+            #q = y + self.noise
+            q = y
         else:
             # Quantization by rounding
             # TODO(ajayjain): Verify this works, as torch.round may not
