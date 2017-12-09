@@ -134,7 +134,7 @@ class Uncompress(nn.Module):
         super(Uncompress, self).__init__()
         self.layers = nn.Sequential(
             # Stage 1
-            IGDN2d(in_channels),          # invert the normalization transform
+            # IGDN2d(in_channels),          # invert the normalization transform
             nn.Upsample(scale_factor=2),  # nearest-neighbor upsampling
             nn.Conv2d(                    # convolutional filter
                 in_channels=in_channels,

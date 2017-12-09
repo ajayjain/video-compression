@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 import time
 
 import torch
@@ -94,9 +95,10 @@ val_loader = torch.utils.data.DataLoader(
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     os.makedirs('models', exist_ok=True)
-    torch.save(state, os.path.join('models', filename))
+    dest = os.path.join('models', filename)
+    torch.save(state, dest)
     if is_best:
-        shutil.copyfile(filename, os.path.join('models', 'model_best.pth.tar'))
+        shutil.copyfile(dest, os.path.join('models', 'model_best.pth.tar'))
 
 
 class AverageMeter(object):
@@ -143,10 +145,10 @@ def validate(model, criterion, loader):
         
         if i % args.print_freq == 0:
             print('Test: [{0}/{1}]\t'
-                  'Time {batch_itime.val:.3f} ({batch_time.avg:.3f})\t'
+                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss.val:.6f} ({loss.avg:.6f})\t'.format(
                   i, len(loader), batch_time=batch_time,
-                  loss=losses, top1=top1, top5=top5))
+                  loss=losses))
 
     print('##############################################################################\n'
           '  Test summary:\n'
