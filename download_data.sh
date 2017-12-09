@@ -30,3 +30,17 @@ for video in "${live_videos[@]}"; do
 done
 
 wget http://vqdatabase.ece.utexas.edu/research/live/vqdatabase/readme.txt --user="$live_user" --password="$live_password" -P data/live/
+
+# Videos + images, ILSVRC
+# cd data
+# wget http://bvisionweb1.cs.unc.edu/ILSVRC2017/ILSVRC2017_VID_test.tar.gz
+# tar -xvzf ILSVRC2017_VID_TEST.tar.gz
+
+# DIV2K dataset
+# https://data.vision.ee.ethz.ch/cvl/DIV2K/validation_release/DIV2K_test_LR_bicubic_X4.zip
+# https://data.vision.ee.ethz.ch/cvl/DIV2K/validation_release/DIV2K_test_LR_bicubic_X4.zip
+# https://data.vision.ee.ethz.ch/cvl/DIV2K/DIV2K_train_HR.zip
+
+cd data
+wget http://press.liacs.nl/mirflickr/mirflickr25k.v2/mirflickr25k.zip
+unzip mirflickr25k.zip
