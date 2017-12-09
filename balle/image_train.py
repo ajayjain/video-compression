@@ -38,6 +38,8 @@ parser.add_argument('--batch-size', '-b', default=32, type=int, metavar='N',
                             help='mini-batch size (1 = pure stochastic) Default: 256')
 parser.add_argument('--lr', default=1e-4, type=float, metavar='LR',
                             help='initial learning rate')
+parser.add_argument('--momentum', default=0.9, type=float,
+                            help='momentum to use with NAG SGD')
 parser.add_argument('--resume', default='', help='path to checkpoint from which to resume (defualt: none)')
 parser.add_argument('--print-freq', default=5, type=int, help='iteration interval at which updates are printed during training')
 args = parser.parse_args()
@@ -216,15 +218,17 @@ def train(train_loader, val_loader):
     criterion = nn.MSELoss()
     if use_cuda:
         criterion.cuda()
-    #optimizer = torch.optim.SGD(model.parameters(), args.lr)
+    #optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, nesterov=True)
     optimizer = torch.optim.Adam(model.parameters(), args.lr)
+
+    best_val_loss = float('inf')
 
     if args.resume:
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)
             args.start_epoch = checkpoint['epoch']
-            best_prec1 = checkpoint['best_prec1']
+            best_val_loss = checkpoint['best_val_loss']
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
@@ -232,7 +236,6 @@ def train(train_loader, val_loader):
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
-    best_val_loss = float('inf')
 
     for epoch in range(args.start_epoch, args.epochs + 1):
         train_loss = train_epoch(model, criterion, optimizer, train_loader, epoch)
