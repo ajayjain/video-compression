@@ -34,7 +34,7 @@ parser.add_argument('--epochs', default=90, type=int, metavar='N',
                             help='number of total epochs to run')
 parser.add_argument('--start_epoch', default=1, type=int, metavar='N',
                             help='manual epoch number (useful on restarts)')
-parser.add_argument('--batch-size', '-b', default=256, type=int, metavar='N',
+parser.add_argument('--batch-size', '-b', default=32, type=int, metavar='N',
                             help='mini-batch size (1 = pure stochastic) Default: 256')
 parser.add_argument('--lr', default=1e-4, type=float, metavar='LR',
                             help='initial learning rate')
@@ -164,27 +164,27 @@ def train_epoch(model, criterion, optimizer, loader, epoch):
 
     batch_time = AverageMeter()
     losses = AverageMeter()
-    
+
     for i, data in enumerate(loader):
         iter_start_time = time.time()
-        
+
         batch_input, batch_target = data
-        
+
         input_var = autograd.Variable(batch_input)
         target_var = autograd.Variable(batch_target)
         if use_cuda:
-            input_var = input_var.cuda(async=True)
-            target_var = target_var.cuda(async=True)
-        
+            input_var = input_var.cuda()
+            target_var = target_var.cuda()
+
         batch_output = model(input_var)
-        
+
         loss = criterion(batch_output, target_var)
         losses.update(loss.data[0], batch_input.size(0))
         
-        loss.backward()
         optimizer.zero_grad()
+        loss.backward()
         optimizer.step()
-        
+         
         batch_time.update(time.time() - iter_start_time)
         
         if i % args.print_freq == 0:
@@ -216,6 +216,7 @@ def train(train_loader, val_loader):
     criterion = nn.MSELoss()
     if use_cuda:
         criterion.cuda()
+    #optimizer = torch.optim.SGD(model.parameters(), args.lr)
     optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
     if args.resume:

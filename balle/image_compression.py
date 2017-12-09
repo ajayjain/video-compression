@@ -34,17 +34,12 @@ class GDN2d(nn.Module):
                     .format(size)
                 )
 
-        # NOTE(ajayjain): Temporarily using a tanh activation until I can debug
-        # explosion of activations with GDN/IGDN
-        #nn.functional.softmin(input, dim=
-        return nn.functional.tanh(input)
-
         # Calculate element-wise normalization factors
         u = input.pow(2)
         u = self.gamma_conv(u)
         u = u + self.beta.expand_as(u)
-        # Apply relu to u, so sqrt arg is nonnegative
-        # and add eps for nonzero denominator
+        # Apply relu to u, so the sqrt argument is nonnegative
+        # and add eps to have a nonzero denominator
         u = nn.functional.relu(u) + self.eps
         u = u.rsqrt()
 
@@ -74,7 +69,6 @@ class IGDN2d(GDN2d):
         # Calculate element-wise inverse normalization factors
         w = torch.pow(input, 2)
         w = torch.clamp(w, min=0, max=1e6)
-        print(w)
         w = self.gamma_conv(w)
         w = w + self.beta.expand_as(w)
         # Apply relu to w, so sqrt arg is nonnegative
@@ -134,7 +128,7 @@ class Uncompress(nn.Module):
         super(Uncompress, self).__init__()
         self.layers = nn.Sequential(
             # Stage 1
-            # IGDN2d(in_channels),          # invert the normalization transform
+            IGDN2d(in_channels),          # invert normalization transform
             nn.Upsample(scale_factor=2),  # nearest-neighbor upsampling
             nn.Conv2d(                    # convolutional filter
                 in_channels=in_channels,
@@ -166,7 +160,6 @@ class Uncompress(nn.Module):
                 padding=4
             ),
         )
-    
 
     def forward(self, x):
         return self.layers(x)
@@ -188,6 +181,12 @@ class CompressUncompress(nn.Module):
             out_channels=image_channels
         )
 
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                # TODO(ajayjain): Look into other initializations
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+
         # TODO(ajayjain): parameters for spline approximating p_{y_i} (y_i)
 
     def forward(self, input):
@@ -198,11 +197,10 @@ class CompressUncompress(nn.Module):
         if self.training:
             # Relaxed quantization:
             #   Add noise, sampled uniformly on [-0.5, 0.5)
-            #self.noise = self.noise.expand_as(y)
-            #self.noise.data.uniform_()
-            #self.noise = self.noise - 0.5
-            #q = y + self.noise
-            q = y
+            self.noise = self.noise.expand_as(y)
+            self.noise.data.uniform_()
+            self.noise = self.noise - 0.5
+            q = y + self.noise
         else:
             # Quantization by rounding
             # TODO(ajayjain): Verify this works, as torch.round may not
