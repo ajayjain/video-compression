@@ -13,16 +13,9 @@ class GDN2d(nn.Module):
         super(GDN2d, self).__init__()
         self.num_features = num_features
 
-        self.gamma_conv = nn.Conv2d(in_channels=num_features, out_channels=num_features, kernel_size=1, stride=1, padding=0)
-        self.beta = nn.Parameter(torch.rand((num_features, 1, 1)) + eps)
-
-        self.reset_parameters()
+        self.conv = nn.Conv2d(in_channels=num_features, out_channels=num_features, kernel_size=1, stride=1, padding=0)
 
         self.eps = eps
-
-    def reset_parameters(self):
-        # TODO(ajayjain): Is this the best initialization of the parameters? perhaps zero_() for beta?
-        self.beta.data.uniform_()
 
     def forward(self, input):
         if self.training:
@@ -36,8 +29,7 @@ class GDN2d(nn.Module):
 
         # Calculate element-wise normalization factors
         u = input.pow(2)
-        u = self.gamma_conv(u)
-        u = u + self.beta.expand_as(u)
+        u = self.conv(u)
         # Apply relu to u, so the sqrt argument is nonnegative
         # and add eps to have a nonzero denominator
         u = nn.functional.relu(u) + self.eps
@@ -68,9 +60,8 @@ class IGDN2d(GDN2d):
 
         # Calculate element-wise inverse normalization factors
         w = torch.pow(input, 2)
-        w = torch.clamp(w, min=0, max=1e6)
-        w = self.gamma_conv(w)
-        w = w + self.beta.expand_as(w)
+        #w = torch.clamp(w, min=0, max=1e6)
+        w = self.conv(w)
         # Apply relu to w, so sqrt arg is nonnegative
         w = nn.functional.relu(w)
         w = w.sqrt()
@@ -129,7 +120,8 @@ class Uncompress(nn.Module):
         self.layers = nn.Sequential(
             # Stage 1
             IGDN2d(in_channels),          # invert normalization transform
-            nn.Upsample(scale_factor=2),  # nearest-neighbor upsampling
+            nn.Upsample(scale_factor=2,
+                mode="bilinear"),         # nearest-neighbor upsampling
             nn.Conv2d(                    # convolutional filter
                 in_channels=in_channels,
                 out_channels=in_channels,
@@ -162,12 +154,17 @@ class Uncompress(nn.Module):
         )
 
     def forward(self, x):
-        return self.layers(x)
+        reconstructed = self.layers(x)
+        if not self.training:
+            reconstructed = torch.clamp(reconstructed, min=0.0, max=1.0)
+        return reconstructed
 
 
 class CompressUncompress(nn.Module):
-    def __init__(self, image_channels=1, inner_channels=128):
+    def __init__(self, image_channels=1, inner_channels=128, pretrained=True):
         super(CompressUncompress, self).__init__()
+
+        self.pretrained = pretrained
 
         self.compress = Compress(
             in_channels=image_channels,

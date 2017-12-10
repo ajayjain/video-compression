@@ -42,6 +42,9 @@ parser.add_argument('--momentum', default=0.9, type=float,
                             help='momentum to use with NAG SGD')
 parser.add_argument('--resume', default='', help='path to checkpoint from which to resume (defualt: none)')
 parser.add_argument('--print-freq', default=5, type=int, help='iteration interval at which updates are printed during training')
+# Model arguments
+parser.add_argument('--inner-channels', default=128, type=int,
+                            help='number of intermediate channels')
 args = parser.parse_args()
 
 
@@ -182,11 +185,29 @@ def train_epoch(model, criterion, optimizer, loader, epoch):
 
         loss = criterion(batch_output, target_var)
         losses.update(loss.data[0], batch_input.size(0))
-        
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-         
+
+        # Post-process weights
+        for (index, module) in model.compress.layers._modules.items():
+            if isinstance(module, nn.modules.conv.Conv2d):
+                norm = module.weight.pow(2).sum(3).sum(2).sum(1).rsqrt()
+                norm = norm.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+                normalized = module.weight * norm
+                module.weight.data.copy_(normalized.data)
+                #print(module.weight)
+                #print(module.weight.sum(3).sum(2).sum(1))
+                #__import__('sys').exit(0)
+
+        for (index, module) in model.uncompress.layers._modules.items():
+            if isinstance(module, nn.modules.conv.Conv2d):
+                norm = module.weight.pow(2).sum(3).sum(2).sum(0).rsqrt()
+                norm = norm.unsqueeze(0).unsqueeze(2).unsqueeze(3)
+                normalized = module.weight * norm
+                module.weight.data.copy_(normalized.data)
+
         batch_time.update(time.time() - iter_start_time)
         
         if i % args.print_freq == 0:
@@ -207,7 +228,7 @@ def train_epoch(model, criterion, optimizer, loader, epoch):
 
 def train(train_loader, val_loader):
     # Initialize grayscale model
-    base_model = CompressUncompress(image_channels=1)
+    base_model = CompressUncompress(image_channels=1, inner_channels=args.inner_channels)
     if use_cuda:
         base_model.cuda()
     #model = nn.DataParallel(base_model)
