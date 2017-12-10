@@ -35,7 +35,7 @@ parser.add_argument('--epochs', default=90, type=int, metavar='N',
 parser.add_argument('--start_epoch', default=1, type=int, metavar='N',
                             help='manual epoch number (useful on restarts)')
 parser.add_argument('--batch-size', '-b', default=32, type=int, metavar='N',
-                            help='mini-batch size (1 = pure stochastic) Default: 256')
+                            help='mini-batch size (1 = pure stochastic) Default: 32')
 parser.add_argument('--lr', default=1e-4, type=float, metavar='LR',
                             help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float,
@@ -245,7 +245,7 @@ def train(train_loader, val_loader):
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
+            args.start_epoch = checkpoint['epoch'] + 1
             best_val_loss = checkpoint['best_val_loss']
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])

@@ -15,6 +15,12 @@ class GDN2d(nn.Module):
 
         self.conv = nn.Conv2d(in_channels=num_features, out_channels=num_features, kernel_size=1, stride=1, padding=0)
 
+        # Average the weight gradient with its transpose to make the
+        # weight matrix symmetric (wrt input and output channels)
+        def average_with_transpose(grad):
+            return 0.5 * (grad + grad.transpose(0, 1))
+        self.conv.weight.register_hook(average_with_transpose)
+
         self.eps = eps
 
     def forward(self, input):
@@ -108,6 +114,26 @@ class Compress(nn.Module):
                 padding=2
             ),
             GDN2d(out_channels),
+
+            # Stage 4
+            nn.Conv2d(
+                in_channels=out_channels,
+                out_channels=out_channels,
+                kernel_size=3,
+                stride=1,
+                padding=1
+            ),
+            GDN2d(out_channels),
+
+            # Stage 5
+            #nn.Conv2d(
+            #    in_channels=out_channels,
+            #    out_channels=out_channels,
+            #    kernel_size=3,
+            #    stride=1,
+            #    padding=1
+            #),
+            #GDN2d(out_channels),
         )
 
     def forward(self, x):
@@ -118,10 +144,29 @@ class Uncompress(nn.Module):
     def __init__(self, in_channels=128, out_channels=1):
         super(Uncompress, self).__init__()
         self.layers = nn.Sequential(
+            # Stage -1
+            #IGDN2d(in_channels),          # invert normalization transform
+            #nn.Conv2d(
+            #    in_channels=out_channels,
+            #    out_channels=out_channels,
+            #    kernel_size=3,
+            #    stride=1,
+            #    padding=1
+            #),
+
+            # Stage 0
+            IGDN2d(in_channels),          # invert normalization transform
+            nn.Conv2d(                    # convolutional filter
+                in_channels=in_channels,
+                out_channels=in_channels,
+                kernel_size=3,
+                stride=1,
+                padding=1
+            ),
+
             # Stage 1
             IGDN2d(in_channels),          # invert normalization transform
-            nn.Upsample(scale_factor=2,
-                mode="bilinear"),         # nearest-neighbor upsampling
+            nn.Upsample(scale_factor=2),  # nearest-neighbor upsampling
             nn.Conv2d(                    # convolutional filter
                 in_channels=in_channels,
                 out_channels=in_channels,
@@ -171,8 +216,6 @@ class CompressUncompress(nn.Module):
             out_channels=inner_channels
         )
 
-        #self.noise = torch.autograd.Variable(torch.rand(1), requires_grad = False).cuda()
-
         self.uncompress = Uncompress(
             in_channels=inner_channels,
             out_channels=image_channels
@@ -190,20 +233,22 @@ class CompressUncompress(nn.Module):
         # Transform input to latent code space, y = g_a(x; phi)
         y = self.compress(input)
 
+
         # (Relaxed) quantization step for transmission
-        #if self.training:
-        #    # Relaxed quantization:
-        #    #   Add noise, sampled uniformly on [-0.5, 0.5)
-        #    self.noise = self.noise.expand_as(y)
-        #    self.noise.data.uniform_()
-        #    self.noise = self.noise - 0.5
-        #    q = y + self.noise
-        #else:
-        #    # Quantization by rounding
-        #    # TODO(ajayjain): Verify this works, as torch.round may not
-        #    # be available for variables
-        #    q = torch.round(y)
-        q = y
+        if self.training:
+            # Relaxed quantization:
+            #   Add noise, sampled uniformly on [-0.5, 0.5)
+            noise = torch.autograd.Variable(torch.rand(y.size()).cuda())
+            noise -= 0.5
+            #self.noise = self.noise.expand_as(y)
+            #self.noise.data.uniform_()
+            #self.noise = self.noise - 0.5
+            q = y + noise
+        else:
+            # Quantization by rounding
+            # TODO(ajayjain): Verify this works, as torch.round may not
+            # be available for variables
+            q = torch.round(y)
 
         # Reinterpret q as an approximation of the pre-transmission code:
         #   y_hat = q,
