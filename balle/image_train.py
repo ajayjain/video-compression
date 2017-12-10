@@ -191,17 +191,14 @@ def train_epoch(model, criterion, optimizer, loader, epoch):
         optimizer.step()
 
         # Post-process weights
-        for (index, module) in model.compress.layers._modules.items():
+        for (index, module) in model.module.compress.layers._modules.items():
             if isinstance(module, nn.modules.conv.Conv2d):
                 norm = module.weight.pow(2).sum(3).sum(2).sum(1).rsqrt()
                 norm = norm.unsqueeze(1).unsqueeze(2).unsqueeze(3)
                 normalized = module.weight * norm
                 module.weight.data.copy_(normalized.data)
-                #print(module.weight)
-                #print(module.weight.sum(3).sum(2).sum(1))
-                #__import__('sys').exit(0)
 
-        for (index, module) in model.uncompress.layers._modules.items():
+        for (index, module) in model.module.uncompress.layers._modules.items():
             if isinstance(module, nn.modules.conv.Conv2d):
                 norm = module.weight.pow(2).sum(3).sum(2).sum(0).rsqrt()
                 norm = norm.unsqueeze(0).unsqueeze(2).unsqueeze(3)
@@ -231,8 +228,8 @@ def train(train_loader, val_loader):
     base_model = CompressUncompress(image_channels=1, inner_channels=args.inner_channels)
     if use_cuda:
         base_model.cuda()
-    #model = nn.DataParallel(base_model)
-    model = base_model
+    model = nn.DataParallel(base_model)
+    #model = base_model
 
     # Define loss function and optimizer
     # TODO(ajayjain): switch to image_compression.RateDistortionLoss

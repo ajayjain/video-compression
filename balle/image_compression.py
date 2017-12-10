@@ -171,7 +171,7 @@ class CompressUncompress(nn.Module):
             out_channels=inner_channels
         )
 
-        self.noise = torch.autograd.Variable(torch.rand(1), requires_grad = False).cuda()
+        #self.noise = torch.autograd.Variable(torch.rand(1), requires_grad = False).cuda()
 
         self.uncompress = Uncompress(
             in_channels=inner_channels,
@@ -191,18 +191,19 @@ class CompressUncompress(nn.Module):
         y = self.compress(input)
 
         # (Relaxed) quantization step for transmission
-        if self.training:
-            # Relaxed quantization:
-            #   Add noise, sampled uniformly on [-0.5, 0.5)
-            self.noise = self.noise.expand_as(y)
-            self.noise.data.uniform_()
-            self.noise = self.noise - 0.5
-            q = y + self.noise
-        else:
-            # Quantization by rounding
-            # TODO(ajayjain): Verify this works, as torch.round may not
-            # be available for variables
-            q = torch.round(y)
+        #if self.training:
+        #    # Relaxed quantization:
+        #    #   Add noise, sampled uniformly on [-0.5, 0.5)
+        #    self.noise = self.noise.expand_as(y)
+        #    self.noise.data.uniform_()
+        #    self.noise = self.noise - 0.5
+        #    q = y + self.noise
+        #else:
+        #    # Quantization by rounding
+        #    # TODO(ajayjain): Verify this works, as torch.round may not
+        #    # be available for variables
+        #    q = torch.round(y)
+        q = y
 
         # Reinterpret q as an approximation of the pre-transmission code:
         #   y_hat = q,
