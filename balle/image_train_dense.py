@@ -39,6 +39,8 @@ parser.add_argument('--batch-size', '-b', default=32, type=int, metavar='N',
                             help='mini-batch size (1 = pure stochastic) Default: 32')
 parser.add_argument('--lr', default=1e-4, type=float, metavar='LR',
                             help='initial learning rate')
+parser.add_argument('--weight-decay', default=0.0, type=float,
+                            help='L2 regularization parameter')
 parser.add_argument('--momentum', default=0.9, type=float,
                             help='momentum to use with NAG SGD')
 parser.add_argument('--resume', default='', help='path to checkpoint from which to resume (defualt: none)')
@@ -235,7 +237,11 @@ def train(train_loader, val_loader):
     criterion = nn.MSELoss()
     if use_cuda:
         criterion.cuda()
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, nesterov=True)
+    optimizer = torch.optim.SGD(
+        model.parameters(), lr=args.lr,
+        momentum=args.momentum, nesterov=True,
+        weight_decay=args.weight_decay,
+    )
     #optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
     best_val_loss = float('inf')
