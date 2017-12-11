@@ -13,7 +13,13 @@ class GDN2d(nn.Module):
         super(GDN2d, self).__init__()
         self.num_features = num_features
 
-        self.conv = nn.Conv2d(in_channels=num_features, out_channels=num_features, kernel_size=1, stride=1, padding=0)
+        self.conv = nn.Conv2d(
+            in_channels=num_features,
+            out_channels=num_features,
+            kernel_size=1,
+            stride=1,
+            padding=0
+        )
 
         # Average the weight gradient with its transpose to make the
         # weight matrix symmetric (wrt input and output channels)

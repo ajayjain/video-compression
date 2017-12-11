@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 import shutil
 import time
@@ -27,6 +28,8 @@ parser.add_argument('--train-dir', metavar='PATH', required=True,
 parser.add_argument('--val-dir', metavar='PATH', required=True,
                             help='path to validation data folder')
 parser.add_argument('--color-mode', default='gray', help='input/output color mode [gray | color] (default: gray)')
+parser.add_argument('--binarization', default=0.2, type=float,
+                    help='weight of reconstructed tensor binarizing loss')
 parser.add_argument('--threads', '-j', default=2, type=int, metavar='N',
                             help='number of data loading threads (default: 2)')
 # Training arguments
@@ -223,6 +226,35 @@ def train_epoch(model, criterion, optimizer, loader, epoch):
     return losses.avg
 
 
+class BinarizingLoss(nn.Module):
+    def __init__(self):
+        super(BinarizingLoss, self).__init__()
+
+    def forward(self, x):
+        clamped = torch.clamp(x, min=0., max=1.)
+        central_tendancy = 0.5 * torch.pow(torch.sin(clamped * math.pi), 4)
+        mean = central_tendancy.mean()
+        return mean
+
+
+class BinarizingSmoothL1Loss(nn.Module):
+    def __init__(self, binarization_weight=0.2):
+        super(BinarizingSmoothL1Loss, self).__init__()
+
+        self.error_loss = nn.SmoothL1Loss()
+        self.binarizing_loss = BinarizingLoss()
+        self.binarization_weight = binarization_weight
+    
+    def forward(self, output, target):
+        error = self.error_loss(output, target)
+        central_tendancy = self.binarizing_loss(output)
+
+        # clamping = torch.nn.functional.relu(output - 1) + torch.nn.functional.relu(-output)
+
+        return ((1 - self.binarization_weight) * error +
+                self.binarization_weight * central_tendancy)
+
+
 def train(train_loader, val_loader):
     # Initialize grayscale model
     base_model = CompressUncompress(image_channels=1, inner_channels=args.inner_channels)
@@ -233,7 +265,7 @@ def train(train_loader, val_loader):
 
     # Define loss function and optimizer
     # TODO(ajayjain): switch to image_compression.RateDistortionLoss
-    criterion = nn.MSELoss()
+    criterion = BinarizingSmoothL1Loss(args.binarization)
     if use_cuda:
         criterion.cuda()
     #optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, nesterov=True)
