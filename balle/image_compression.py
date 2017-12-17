@@ -48,7 +48,7 @@ class GDN2d(nn.Module):
         u = u.rsqrt()
 
         # Normalize input
-        return torch.clamp(input * u, max=1e3)
+        return input * u
 
     def __repr__(self):
         return ('{name}({num_features}'
@@ -72,7 +72,6 @@ class IGDN2d(GDN2d):
 
         # Calculate element-wise inverse normalization factors
         w = torch.pow(input, 2)
-        #w = torch.clamp(w, min=0, max=1e6)
         w = self.conv(w)
         # Apply relu to w, so sqrt arg is nonnegative
         w = nn.functional.relu(w)
@@ -120,26 +119,6 @@ class Compress(nn.Module):
                 padding=2
             ),
             GDN2d(out_channels),
-
-            # Stage 4
-            nn.Conv2d(
-                in_channels=out_channels,
-                out_channels=out_channels,
-                kernel_size=3,
-                stride=1,
-                padding=1
-            ),
-            GDN2d(out_channels),
-
-            # Stage 5
-            #nn.Conv2d(
-            #    in_channels=out_channels,
-            #    out_channels=out_channels,
-            #    kernel_size=3,
-            #    stride=1,
-            #    padding=1
-            #),
-            #GDN2d(out_channels),
         )
 
     def forward(self, x):
@@ -150,26 +129,6 @@ class Uncompress(nn.Module):
     def __init__(self, in_channels=128, out_channels=1):
         super(Uncompress, self).__init__()
         self.layers = nn.Sequential(
-            # Stage -1
-            #IGDN2d(in_channels),          # invert normalization transform
-            #nn.Conv2d(
-            #    in_channels=out_channels,
-            #    out_channels=out_channels,
-            #    kernel_size=3,
-            #    stride=1,
-            #    padding=1
-            #),
-
-            # Stage 0
-            IGDN2d(in_channels),          # invert normalization transform
-            nn.Conv2d(                    # convolutional filter
-                in_channels=in_channels,
-                out_channels=in_channels,
-                kernel_size=3,
-                stride=1,
-                padding=1
-            ),
-
             # Stage 1
             IGDN2d(in_channels),          # invert normalization transform
             nn.Upsample(scale_factor=2),  # nearest-neighbor upsampling
@@ -239,16 +198,12 @@ class CompressUncompress(nn.Module):
         # Transform input to latent code space, y = g_a(x; phi)
         y = self.compress(input)
 
-
         # (Relaxed) quantization step for transmission
         if self.training:
             # Relaxed quantization:
             #   Add noise, sampled uniformly on [-0.5, 0.5)
             noise = torch.autograd.Variable(torch.rand(y.size()).cuda())
             noise -= 0.5
-            #self.noise = self.noise.expand_as(y)
-            #self.noise.data.uniform_()
-            #self.noise = self.noise - 0.5
             q = y + noise
         else:
             # Quantization by rounding
@@ -278,4 +233,3 @@ class RateDistortionLoss(nn.Module):
         R = 0
 
         return R + self.gamma * D
-
