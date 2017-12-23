@@ -64,11 +64,17 @@ class ImageIdentity(data.Dataset):
 
         img = self.loader(path)
         if self.transform is not None:
-            img = self.transform(img)
+            try:
+                img = self.transform(img)
+            except:
+                print("ERROR when transforming image at path {}".format(path))
 
         target = img
         if self.target_transform is not None:
-            target = self.target_transform(target)
+            try:
+                target = self.target_transform(target)
+            except:
+                print("ERROR when transforming image at path {}".format(path))
 
         return img, target
 

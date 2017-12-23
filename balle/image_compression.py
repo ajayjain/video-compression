@@ -82,7 +82,7 @@ class IGDN2d(GDN2d):
 
 
 class Compress(nn.Module):
-    def __init__(self, in_channels=1, out_channels=128):
+    def __init__(self, in_channels=1, out_channels=256):
         super(Compress, self).__init__()
         # NOTE(ajayjain): I'm guessing the padding, but it looks like the 
         # authors simply pad the image once at the beginning.
@@ -90,13 +90,15 @@ class Compress(nn.Module):
 
         # Let the number of intermediate channels equal the output channels
         self.layers = nn.Sequential(
+            nn.ReflectionPad2d(4 + 4*2 + 4*2*2),
+
             # Stage 1
             nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
                 kernel_size=9,
                 stride=4,
-                padding=4
+                padding=0
             ),
             GDN2d(out_channels),
 
@@ -106,7 +108,7 @@ class Compress(nn.Module):
                 out_channels=out_channels,
                 kernel_size=5,
                 stride=2,
-                padding=2
+                padding=0
             ),
             GDN2d(out_channels),
 
@@ -116,7 +118,7 @@ class Compress(nn.Module):
                 out_channels=out_channels,
                 kernel_size=5,
                 stride=2,
-                padding=2
+                padding=0
             ),
             GDN2d(out_channels),
         )
@@ -126,7 +128,7 @@ class Compress(nn.Module):
 
 
 class Uncompress(nn.Module):
-    def __init__(self, in_channels=128, out_channels=1):
+    def __init__(self, in_channels=256, out_channels=1):
         super(Uncompress, self).__init__()
         self.layers = nn.Sequential(
             # Stage 1
@@ -141,7 +143,7 @@ class Uncompress(nn.Module):
             ),
 
             # Stage 2
-            IGDN2d(in_channels),           
+            IGDN2d(in_channels),
             nn.Upsample(scale_factor=2),
             nn.Conv2d(
                 in_channels=in_channels,
@@ -171,7 +173,7 @@ class Uncompress(nn.Module):
 
 
 class CompressUncompress(nn.Module):
-    def __init__(self, image_channels=1, inner_channels=128, pretrained=True):
+    def __init__(self, image_channels=1, inner_channels=256, pretrained=True):
         super(CompressUncompress, self).__init__()
 
         self.pretrained = pretrained
@@ -221,8 +223,8 @@ class CompressUncompress(nn.Module):
 
 
 class RateDistortionLoss(nn.Module):
-    def __init__(self, gamma):
-        self.gamma = gamma
+    def __init__(self, lamb):
+        self.lamb = lamb
         super(RateDistortionLoss, self).__init__()
 
         self.distortion_loss = nn.MSELoss()
@@ -232,4 +234,5 @@ class RateDistortionLoss(nn.Module):
         # TODO(ajayjain): Implement rate estimate
         R = 0
 
-        return R + self.gamma * D
+        return R + self.lamb * D
+
